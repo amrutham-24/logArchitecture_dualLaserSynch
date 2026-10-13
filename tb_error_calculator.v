@@ -106,28 +106,32 @@ module tb_error_calculator;
         repeat (3) @(negedge clk);
         rst = 1'b0;
 
-        // 1. At target power, error should be zero.
-        check_case(17'd95666, 0, 0, 0, 0);
+                // 1. At target power: error should be zero.
+        check_case(17'd79283, 0, 0, 0, 0);
 
         // 2. Measured log-power is zero.
-        check_case(17'd0, 0, 0, 95666, 95666);
+        // Error = 79283 - 0 = 79283.
+        check_case(17'd0, 0, 0, 79283, 79283);
 
-        // 3. Measured power exceeds target.
-        check_case(17'd100000, 0, 0, -4334, -4334);
+        // 3. Measured log-power exceeds target.
+        // Error = 79283 - 100000 = -20717.
+        check_case(17'd100000, 0, 0, -20717, -20717);
 
         // 4. Bias delta = +1.0 in Q16.16.
-        // Compensation = 1.5 * 1.0 = 1.5 in log2 units.
-        // Q12 compensation = 6144.
-        check_case(17'd95666, 32'sd65536, 32'sd0,
+        // Compensation = +6144 in Q12.
+        // Predicted error = 0 - 6144.
+        check_case(17'd79283, 32'sd65536, 32'sd0,
                    0, -6144);
 
         // 5. Bias delta = -1.0 in Q16.16.
-        check_case(17'd95666, 32'sd0, 32'sd65536,
+        // Compensation = -6144 in Q12.
+        // Predicted error = 0 + 6144.
+        check_case(17'd79283, 32'sd0, 32'sd65536,
                    0, 6144);
-
+                   
         // 6. Equal current and historical biases: no compensation.
         check_case(17'd90000, 32'sd131072, 32'sd131072,
-                   5666, 5666);
+                   -10717, -10717);
 
        // 7. Invalid cycle: outputs must hold their previous values
 begin : invalid_cycle_test
@@ -174,50 +178,57 @@ end
 
         repeat (2) @(negedge clk);
         // 9. Fractional positive bias delta:
-        // delta = 0.5 in Q16.16
-        // compensation = 0.75 * 4096 = 3072
-        check_case(17'd95666, 32'sd32768, 32'sd0,
-                   0, -3072);
+// delta = +0.5 in Q16.16.
+// Compensation = +0.75 in log2 units = 3072 in Q12.
+// At target, error = 0; predicted error = -3072.
+check_case(17'd79283, 32'sd32768, 32'sd0,
+           0, -3072);
 
-        // 10. Fractional negative bias delta:
-        // delta = -0.5; compensation = -3072
-        check_case(17'd95666, 32'sd0, 32'sd32768,
-                   0, 3072);
+// 10. Fractional negative bias delta:
+// delta = -0.5 in Q16.16.
+// Compensation = -0.75 in log2 units = -3072 in Q12.
+// At target, error = 0; predicted error = +3072.
+check_case(17'd79283, 32'sd0, 32'sd32768,
+           0, 3072);
 
-        // 11. Large positive compensation: saturate negative
-        check_case(17'd95666, 32'sd16777216, 32'sd0,
-                   0, -131072);
+// 11. Large positive compensation: saturate negative.
+// At target, error = 0; predicted error saturates at -131072.
+check_case(17'd79283, 32'sd16777216, 32'sd0,
+           0, -131072);
 
-        // 12. Large negative compensation: saturate positive
-        check_case(17'd95666, 32'sd0, 32'sd16777216,
-                   0, 131071);
+// 12. Large negative compensation: saturate positive.
+// At target, error = 0; predicted error saturates at +131071.
+check_case(17'd79283, 32'sd0, 32'sd16777216,
+           0, 131071);
 
-                // 13. Consecutive valid measurements
-        @(negedge clk);
-        rst = 1'b0;
-        log_power_q12 = 17'd90000;
-        bias_log_q16 = 32'sd0;
-        bias_hist_log_q16 = 32'sd0;
-        log_valid = 1'b1;
+// 13. Consecutive valid measurements.
+// Measured log-power = 90000.
+// Error = 79283 - 90000 = -10717.
+@(negedge clk);
+rst = 1'b0;
+log_power_q12 = 17'd90000;
+bias_log_q16 = 32'sd0;
+bias_hist_log_q16 = 32'sd0;
+log_valid = 1'b1;
 
-        repeat (2) begin
-            @(posedge clk);
-            #1;
+repeat (2) begin
+    @(posedge clk);
+    #1;
 
-            if (err_valid !== 1'b1 ||
-                $signed(dbg_err_q12) !== 5666 ||
-                $signed(dbg_ep_q12) !== 5666) begin
-                errors = errors + 1;
-                $display("FAIL: consecutive valid measurement");
-            end
-            else begin
-                $display("PASS: consecutive valid measurement");
-            end
-        end
+    if (err_valid !== 1'b1 ||
+        $signed(dbg_err_q12) !== -10717 ||
+        $signed(dbg_ep_q12) !== -10717) begin
+        errors = errors + 1;
+        $display("FAIL: consecutive valid measurement");
+    end
+    else begin
+        $display("PASS: consecutive valid measurement");
+    end
+end
 
-        @(negedge clk);
-        log_valid = 1'b0;
-        
+@(negedge clk);
+log_valid = 1'b0;
+
         // 14. Reset after active measurements
         @(negedge clk);
         rst = 1'b1;
@@ -236,6 +247,24 @@ end
 
         @(negedge clk);
         rst = 1'b0;
+        
+        // 15. At target power: error should be zero.
+check_case(17'd79283, 0, 0, 0, 0);
+
+// 16. Below target: positive error.
+check_case(17'd70000, 0, 0, 9283, 9283);
+
+// 17. Above target: negative error.
+check_case(17'd100000, 0, 0, -20717, -20717);
+
+// 18. Bias delta = +1.0 in Q16.16.
+// Error = 0; predicted error = -6144.
+check_case(17'd79283, 32'sd65536, 32'sd0,
+           0, -6144);
+
+// 19. Bias delta = -1.0 in Q16.16.
+check_case(17'd79283, 32'sd0, 32'sd65536,
+           0, 6144);
 
 
         if (errors == 0)
