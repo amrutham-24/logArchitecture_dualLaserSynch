@@ -16,7 +16,18 @@
 // Revision:
 // Revision 0.01 - File Created
 // Additional Comments:
-// 
+// Calculates log2(mean_square) in unsigned Q5.12 format.
+//
+// IMPORTANT:
+// mean_square is in squared integer sample-code units, NOT watts.
+// The controller's simulation convention is:
+//     P_watts = mean_square / 2^26
+//
+// Therefore:
+//     log2(P_watts) = log2(mean_square) - 26
+//
+// The error calculator incorporates this offset into its target,
+// allowing this block's verified unsigned Q5.12 interface to remain.
 //////////////////////////////////////////////////////////////////////////////////
 
 
